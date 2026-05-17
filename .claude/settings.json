@@ -1,0 +1,8 @@
+{
+  "tools": {
+    "allowed": ["bash", "edit", "read", "write", "grep", "search"],
+    "disallowed": ["sudo", "curl_internet"]
+  },
+  "model": "claude-opus-4-7",
+  "max_thinking_tokens": 16000
+}
