@@ -1,0 +1,222 @@
+"""Generate the human-readable ``CARL_REPORT.md`` from the SQLite buffer.
+
+The report is the artifact a CS153 grader, peer reviewer, or hiring
+manager actually reads. It is generated deterministically from the
+buffer rows + gate decisions, so re-running ``carl auto`` always
+produces the same report for the same data.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from carl.core.promotion.gate import GateResult
+
+
+@dataclass(frozen=True)
+class ReportInputs:
+    repo_path: Path
+    adapter_name: str
+    baseline_version: str
+    candidate_version: str
+    gate: GateResult
+    n_train_episodes: int
+    promoted_diffs: list[tuple[str, str, str, float, float]]  # (version, artifact, op, lift, ci_low)
+
+
+def write_report(buffer_path: Path, inputs: ReportInputs, out_path: Path) -> Path:
+    """Render the markdown report and write it to ``out_path``."""
+    decomp = _reward_decomposition(buffer_path, [inputs.baseline_version, inputs.candidate_version])
+    per_task = _per_task_table(buffer_path, inputs.candidate_version, inputs.baseline_version)
+
+    md = _render(inputs, decomp, per_task)
+    out_path.write_text(md, encoding="utf-8")
+    return out_path
+
+
+def _render(
+    inp: ReportInputs,
+    decomp: dict[str, dict[str, float]],
+    per_task: list[tuple[str, float, float, float]],
+) -> str:
+    g = inp.gate
+    headline_emoji = "**PROMOTE**" if g.promote else "**REJECT**"
+    rel_lift_pct = (
+        100.0 * g.mean_lift / max(1e-9, decomp.get(inp.baseline_version, {}).get("r_total", 1e-9))
+    )
+
+    diff_section = _render_diff_history(inp.promoted_diffs)
+    decomp_section = _render_decomposition_table(decomp, inp.baseline_version, inp.candidate_version)
+    per_task_section = _render_per_task_table(per_task)
+
+    return f"""# CARL — Improvement Report
+
+**Repository:** `{inp.repo_path}`
+**Adapter:** `{inp.adapter_name}`
+**Generated:** {datetime.now(tz=UTC).isoformat(timespec="seconds")}
+**Baseline policy:** `{inp.baseline_version}`
+**Candidate policy:** `{inp.candidate_version}`
+**Training episodes:** {inp.n_train_episodes}
+**Probe set size:** n = {g.n_tasks} (paired)
+
+---
+
+## Headline result
+
+| | Baseline | CARL | Lift | 95 % CI (BCa) | _p_-value (one-sided) | Decision |
+|---|---|---|---|---|---|---|
+| Mean reward | {decomp.get(inp.baseline_version, {}).get("r_total", 0.0):.4f} | {decomp.get(inp.candidate_version, {}).get("r_total", 0.0):.4f} | {g.mean_lift:+.4f} ({rel_lift_pct:+.1f} %) | [{g.ci_low:+.4f}, {g.ci_high:+.4f}] | {g.p_value:.4f} | {headline_emoji} |
+
+The promotion gate is a paired-bootstrap test (`scipy.stats.bootstrap` with
+`method="BCa"`, `n_resamples = {g.n_resamples:,}`). A candidate is promoted
+iff its 95 % CI lower bound on the per-task reward lift exceeds zero on a
+held-out probe set of `n ≥ 30` paired tasks.
+
+> Gate verdict: {g.reason}
+
+---
+
+## Reward decomposition
+
+{decomp_section}
+
+`r_total = w_v · r_verifier + w_j · r_judge − w_h · r_hack` with default
+weights `0.65 / 0.25 / 0.10`. The verifier component is the deterministic
+RLVR backbone (pytest + coverage + ruff + mypy + optional bandit). The
+judge is bias-controlled (position-flip, family rotation, rubric-shuffle).
+The hack-probe penalty is subtracted; it cannot rescue a CI failure.
+
+---
+
+## What CARL changed
+
+{diff_section}
+
+Every promotion above cleared a paired-bootstrap CI lower bound > 0 on a
+held-out probe set during training.
+
+---
+
+## Per-task breakdown (top 10 by absolute lift)
+
+{per_task_section}
+
+---
+
+## Methodology
+
+- **Reward.** Composite scalar in [0, 1]: `r = 0.65 r_verifier + 0.25 r_judge − 0.10 r_hack`.
+- **Verifier (RLVR).** Deterministic CI parser: pytest exit + per-test JSON, coverage XML delta, ruff JSON diagnostics, mypy errors, optional bandit findings. Weights renormalize when a signal is absent.
+- **Judge (RLAIF).** LLM reviewer with position-flipped pairwise comparisons, family-rotated calls across `claude-opus-4-7` ↔ `gpt-5.5` ↔ `composer-2` ↔ `claude-sonnet-4-6`, and deterministic rubric-shuffle. Inter-judge agreement reported.
+- **Hack probes.** Six-pattern detector (try/except around pytest, commented assertions, blanket pytest skip, hook touches CI runner, ignored exit codes, trivial `assert True`).
+- **Promotion gate.** Paired bootstrap, BCa CI, 10 000 resamples, n ≥ 30, lower-bound > 0 criterion.
+- **Reproducibility.** Re-run with `carl auto --buffer {Path('carl_run/buffer.sqlite')!s}`.
+
+---
+
+## Reproducing this report
+
+```bash
+git clone <this repo>
+cd <this repo>
+pip install carl-loop
+docker build -t carl/episode-claude:latest -f docker/Dockerfile.episode.claude .
+export ANTHROPIC_API_KEY=<your key>
+carl auto --episodes {inp.n_train_episodes} --probe-n {g.n_tasks}
+```
+
+The report is regenerated deterministically from the SQLite replay
+buffer; identical seeds + identical buffer rows produce an identical
+markdown file.
+
+---
+
+*Generated by [CARL](https://github.com/anni-stanford/carl) — Continuous Agent Reinforcement Loop.*
+"""
+
+
+def _render_decomposition_table(
+    decomp: dict[str, dict[str, float]],
+    baseline_version: str,
+    candidate_version: str,
+) -> str:
+    base = decomp.get(baseline_version, {})
+    cand = decomp.get(candidate_version, {})
+    rows = [
+        ("r_total", base.get("r_total", 0.0), cand.get("r_total", 0.0)),
+        ("r_verifier", base.get("r_verifier", 0.0), cand.get("r_verifier", 0.0)),
+        ("r_judge", base.get("r_judge", 0.0), cand.get("r_judge", 0.0)),
+        ("r_hack (penalty, lower is better)", base.get("r_hack", 0.0), cand.get("r_hack", 0.0)),
+    ]
+    out = ["| Component | Baseline | CARL | Δ |", "|---|---|---|---|"]
+    for name, b, c in rows:
+        out.append(f"| `{name}` | {b:.4f} | {c:.4f} | {c - b:+.4f} |")
+    return "\n".join(out)
+
+
+def _render_diff_history(promoted: list[tuple[str, str, str, float, float]]) -> str:
+    if not promoted:
+        return "_No diffs were promoted during this run. The current policy is unchanged from the seed._"
+    out = [
+        "| # | Policy version | Artifact | Operation | Mean lift | CI lower bound |",
+        "|---|---|---|---|---|---|",
+    ]
+    for i, (version, artifact, op, lift, ci_low) in enumerate(promoted, 1):
+        out.append(f"| {i} | `{version}` | `{artifact}` | `{op}` | {lift:+.4f} | {ci_low:+.4f} |")
+    return "\n".join(out)
+
+
+def _render_per_task_table(rows: list[tuple[str, float, float, float]]) -> str:
+    if not rows:
+        return "_No per-task data available._"
+    out = [
+        "| Task | Baseline reward | CARL reward | Δ |",
+        "|---|---|---|---|",
+    ]
+    for task_id, base_r, cand_r, delta in rows:
+        out.append(f"| `{task_id}` | {base_r:.4f} | {cand_r:.4f} | {delta:+.4f} |")
+    return "\n".join(out)
+
+
+def _reward_decomposition(buffer_path: Path, versions: list[str]) -> dict[str, dict[str, float]]:
+    """Mean per-component reward by policy version."""
+    out: dict[str, dict[str, float]] = {}
+    if not buffer_path.is_file():
+        return out
+    with sqlite3.connect(str(buffer_path)) as conn:
+        for v in versions:
+            row = conn.execute(
+                "SELECT AVG(r_total), AVG(r_verifier), AVG(r_judge), AVG(r_hack) "
+                "FROM trajectories WHERE policy_version = ?",
+                (v,),
+            ).fetchone()
+            if row and row[0] is not None:
+                out[v] = {
+                    "r_total": float(row[0]),
+                    "r_verifier": float(row[1] or 0.0),
+                    "r_judge": float(row[2] or 0.0),
+                    "r_hack": float(row[3] or 0.0),
+                }
+    return out
+
+
+def _per_task_table(
+    buffer_path: Path, candidate_version: str, baseline_version: str, top_k: int = 10
+) -> list[tuple[str, float, float, float]]:
+    """Per-task (baseline_r, candidate_r, delta), ordered by |delta| desc, top_k."""
+    if not buffer_path.is_file():
+        return []
+    with sqlite3.connect(str(buffer_path)) as conn:
+        rows = conn.execute(
+            "SELECT t1.task_id, t1.r_total, t2.r_total "
+            "FROM trajectories t1 "
+            "JOIN trajectories t2 ON t1.task_id = t2.task_id "
+            "WHERE t1.policy_version = ? AND t2.policy_version = ?",
+            (baseline_version, candidate_version),
+        ).fetchall()
+    enriched = [(tid, b, c, c - b) for (tid, b, c) in rows]
+    enriched.sort(key=lambda r: abs(r[3]), reverse=True)
+    return enriched[:top_k]

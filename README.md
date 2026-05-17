@@ -12,22 +12,46 @@ CARL ≠ fine-tuning model weights. CARL is RL with **text-space policy paramete
 
 **Anni Zimina** — Stanford CS153 Spring 2026 final project (research track).
 
-## Quickstart — Claude Code
+## Quickstart — one supershort command
+
+From inside any git repo with a Python test suite:
 
 ```bash
 pip install carl-loop
-carl init --adapter claude_code
-carl run --repo .
+docker build -t carl/episode-claude:latest -f docker/Dockerfile.episode.claude .
+export ANTHROPIC_API_KEY=...
+carl auto
 ```
 
-## Quickstart — Cursor
+That single `carl auto` runs the entire pipeline end-to-end:
+
+1. **Pre-flight** — checks git, Docker daemon, `ANTHROPIC_API_KEY`.
+2. **Auto-discover tasks** from your repo (failing tests, ruff / mypy diagnostics, or the defaults in `carl/tasks/discovery.py`).
+3. **Benchmark BEFORE** — runs `n=10` paired tasks under your current `CLAUDE.md` and `.claude/skills/`.
+4. **Train** — runs `episodes=20` learning iterations; CARL **actually edits** your `CLAUDE.md` and skills as promoted diffs clear the paired-bootstrap gate.
+5. **Benchmark AFTER** — re-runs the same `n=10` tasks under the evolved policy.
+6. **Gate** — paired-bootstrap (BCa, 10 000 resamples, n ≥ 30, CI lower bound > 0) on per-task reward deltas.
+7. **Report** — writes `CARL_REPORT.md` with the headline table, reward decomposition, the diff history of what CARL changed, per-task breakdown, methodology, and a reproducibility command.
+
+### Try it without Docker / API key
 
 ```bash
 pip install carl-loop
-npm install -g @carl-loop/cursor
-export CURSOR_API_KEY=...
-carl init --adapter cursor
-carl run --repo . --adapter cursor
+carl auto --dry-run
+```
+
+The `--dry-run` mode uses deterministic synthetic rewards. It exercises the
+full pipeline (auto-discovery → benchmark → training with `apply_diff` →
+benchmark → gate → report) without any external dependency, so you can
+inspect `CARL_REPORT.md` and decide whether to commit to a real run.
+
+### Other commands
+
+```bash
+carl init --adapter claude_code   # write a seed policy into the current repo
+carl run --task "fix the broken type annotation" --episodes 5
+carl status                       # summarise the SQLite replay buffer
+carl gate --candidate v1 --baseline stock   # paired-bootstrap A/B on collected rewards
 ```
 
 ## RL formulation

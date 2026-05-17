@@ -1,20 +1,47 @@
-# Episode sandbox for the Claude Code adapter.
-# Used by carl/env/docker_sandbox.py to run a single episode in isolation.
+# Episode sandbox image for the Claude Code adapter.
+#
+# Built once with:
+#     docker build -t carl/episode-claude:latest -f docker/Dockerfile.episode.claude .
+#
+# At run time the wrapper script in carl.adapters.claude_code expects the
+# following binaries to be on PATH inside the container:
+#     - claude-code   (Anthropic's official Claude Code CLI; npm package)
+#     - pytest, coverage, ruff, mypy, bandit (Python tooling for the verifier)
+# Plus a sane ``ANTHROPIC_API_KEY`` env var, passed in via ``-e`` at run.
+
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    NODE_VERSION=20
 
+# System dependencies + Node.js LTS for the Claude Code CLI.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates build-essential \
+        git curl ca-certificates build-essential gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Python tooling that the in-container wrapper invokes to produce the artifact
+# files the verifier reads.
+RUN pip install --upgrade pip \
+    && pip install \
+         "pytest>=8.3" \
+         "pytest-json-report>=1.5" \
+         "coverage>=7.6" \
+         "ruff>=0.6" \
+         "mypy>=1.11" \
+         "bandit>=1.7"
+
+# Anthropic's Claude Code CLI (official npm package).
+# Pinned to the latest stable available at image-build time; the wrapper
+# uses ``claude-code --print "$PROMPT"`` to run a single agentic pass.
+RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /work
 
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install -e ".[dev]" || true
+# The repo is bind-mounted at /work; CI artifacts are written into /artifacts
+# (also bind-mounted). Both paths are set up by carl.env.docker_sandbox.
 
-# Claude Agent SDK is added during episode bootstrap (so the sandbox image stays
-# small and we can pin per-episode).
 CMD ["bash"]

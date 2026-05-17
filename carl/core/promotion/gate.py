@@ -81,16 +81,7 @@ def evaluate_gate(
     mean_lift = float(deltas.mean())
 
     rng = np.random.default_rng(rng_seed)
-    res = bootstrap(
-        (deltas,),
-        np.mean,
-        n_resamples=config.n_resamples,
-        confidence_level=config.confidence,
-        random_state=rng,
-        method="BCa",  # bias-corrected and accelerated; tighter CIs than percentile
-    )
-    ci_low = float(res.confidence_interval.low)
-    ci_high = float(res.confidence_interval.high)
+    ci_low, ci_high = _bootstrap_ci_with_fallback(deltas, config, rng)
 
     p_value = _one_sided_bootstrap_p(deltas, n_resamples=config.n_resamples, rng=rng)
 
@@ -120,6 +111,51 @@ def evaluate_gate(
         confidence=config.confidence,
         reason=reason,
     )
+
+
+def _bootstrap_ci_with_fallback(
+    deltas: np.ndarray, config: PromotionGateConfig, rng: np.random.Generator
+) -> tuple[float, float]:
+    """BCa bootstrap; if the data are degenerate (NaN result), fall back to percentile.
+
+    BCa is bias-corrected-and-accelerated which gives tighter intervals on
+    skewed distributions, but it's undefined when the bootstrap distribution
+    is degenerate (e.g. all per-task deltas are identical). When that
+    happens scipy emits a ``DegenerateDataWarning`` and returns NaN; we
+    catch that and fall back to the standard percentile bootstrap, which
+    is well-defined for any non-empty dataset.
+    """
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            res = bootstrap(
+                (deltas,),
+                np.mean,
+                n_resamples=config.n_resamples,
+                confidence_level=config.confidence,
+                random_state=rng,
+                method="BCa",
+            )
+            lo = float(res.confidence_interval.low)
+            hi = float(res.confidence_interval.high)
+            if np.isnan(lo) or np.isnan(hi):
+                raise ValueError("BCa produced NaN; data is degenerate")
+            return lo, hi
+        except Exception:  # noqa: BLE001 — any BCa pathology -> percentile fallback
+            pass
+
+        # Fallback: percentile bootstrap (always defined for non-empty data)
+        res = bootstrap(
+            (deltas,),
+            np.mean,
+            n_resamples=config.n_resamples,
+            confidence_level=config.confidence,
+            random_state=rng,
+            method="percentile",
+        )
+        return float(res.confidence_interval.low), float(res.confidence_interval.high)
 
 
 def _one_sided_bootstrap_p(

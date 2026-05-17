@@ -29,6 +29,63 @@ def main() -> None:
     """CARL — Continuous Agent Reinforcement Loop."""
 
 
+# ---- carl auto ---------------------------------------------------------------
+
+
+@main.command()
+@click.option("--repo", type=click.Path(file_okay=False, path_type=Path), default=Path("."))
+@click.option("--probe-n", type=int, default=10, help="paired tasks for BEFORE/AFTER benchmark")
+@click.option("--episodes", type=int, default=20, help="CARL training episodes")
+@click.option("--report", type=click.Path(dir_okay=False, path_type=Path), default=Path("CARL_REPORT.md"))
+@click.option(
+    "--buffer",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path("carl_run/buffer.sqlite"),
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="use deterministic synthetic rewards (no Docker, no API key, no network).",
+)
+@click.option("--seed", type=int, default=20260517)
+def auto(
+    repo: Path,
+    probe_n: int,
+    episodes: int,
+    report: Path,
+    buffer: Path,
+    dry_run: bool,
+    seed: int,
+) -> None:
+    """End-to-end: pre-flight + BEFORE benchmark + training + AFTER benchmark + paired-bootstrap gate + CARL_REPORT.md.
+
+    Real run requires a git repo, a running Docker daemon, and ANTHROPIC_API_KEY.
+    Use ``--dry-run`` to validate the pipeline against synthetic rewards.
+    """
+    import asyncio
+
+    from carl.auto import AutoOptions, run_auto
+
+    opts = AutoOptions(
+        repo_path=Path(repo).resolve(),
+        n_probe=probe_n,
+        n_train_episodes=episodes,
+        dry_run=dry_run,
+        buffer_path=buffer,
+        report_path=report,
+        rng_seed=seed,
+    )
+    result = asyncio.run(run_auto(opts))
+    decision = "PROMOTE" if result.gate.promote else "REJECT "
+    click.echo("")
+    click.echo("=" * 78)
+    click.echo(f"  CARL — {decision}")
+    click.echo(f"  mean lift: {result.gate.mean_lift:+.4f}   95 % CI [{result.gate.ci_low:+.4f}, {result.gate.ci_high:+.4f}]   p={result.gate.p_value:.4f}   n={result.gate.n_tasks}")
+    click.echo(f"  promotions during training: {len(result.promoted)}")
+    click.echo(f"  report: {result.report_path}")
+    click.echo("=" * 78)
+
+
 # ---- carl init ---------------------------------------------------------------
 
 
