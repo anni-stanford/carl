@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: "CARL: Continuous Agent Reinforcement Loop"
+message: "If you use CARL, please cite this work."
+type: software
+authors:
+  - family-names: Zimina
+    given-names: Anni
+    affiliation: Stanford University
+repository-code: "https://github.com/anni-stanford/carl"
+license: MIT
+keywords:
+  - reinforcement-learning
+  - coding-agents
+  - claude-code
+  - cursor
+  - rlvr
+  - grpo
+  - dpo
+  - text-space-policy-optimization

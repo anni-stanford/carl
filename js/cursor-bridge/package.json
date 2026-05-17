@@ -1,0 +1,30 @@
+{
+  "name": "@carl-loop/cursor",
+  "version": "0.1.0",
+  "description": "Cursor adapter for CARL — Node.js JSON-RPC bridge over stdin/stdout that drives @cursor/sdk for episode execution.",
+  "main": "dist/index.js",
+  "bin": {
+    "carl-cursor-bridge": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "author": "Anni Zimina <zimina@stanford.edu>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anni-stanford/carl.git",
+    "directory": "js/cursor-bridge"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4",
+    "@types/node": "^20.12",
+    "vitest": "^2.0"
+  }
+}
