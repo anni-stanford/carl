@@ -1,19 +1,27 @@
 """Claude Code adapter — concrete :class:`PolicyAdapter` implementation.
 
-This first revision covers ``read_policy`` and ``write_policy`` only. The
-``run_episode`` method is a typed stub raising :class:`NotImplementedError`
-until the Docker sandbox + Claude Agent SDK runner lands (Day 3 of the build
-sequence).
+Implements ``read_policy``, ``write_policy``, and ``run_episode`` end-to-end.
+Episode execution uses :mod:`carl.env.docker_sandbox` to run the Claude Agent
+SDK against a clone of the target repo, then runs the repo's CI inside the
+container so :class:`carl.core.reward.verifier.compute_verifier` can score
+the resulting trajectory.
+
+Real execution requires a running Docker daemon plus an ``ANTHROPIC_API_KEY``
+in the environment. Unit tests cover the read/write round-trip and the
+trajectory-construction path; they do not require Docker.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
+import time
 from pathlib import Path
 from typing import Any
 
-from carl.adapters.base import PolicyAdapter, Task, Trajectory
+from carl.adapters.base import PolicyAdapter, Task, TraceEvent, Trajectory
 from carl.core.policy.artifacts import Artifact, ArtifactType, Policy
+from carl.env.docker_sandbox import docker_sandbox, run_in_sandbox
 
 _CLAUDE_DIR = ".claude"
 _RULES_FILE = "CLAUDE.md"
@@ -144,11 +152,78 @@ class ClaudeCodeAdapter(PolicyAdapter):
         task: Task,
         policy: Policy,
         timeout_s: int,
+        *,
+        image: str = "carl/episode-claude:latest",
+        anthropic_api_key: str | None = None,
     ) -> Trajectory:
-        # Implemented Day 3 of the build sequence: Docker sandbox + Claude Agent SDK.
-        raise NotImplementedError(
-            "ClaudeCodeAdapter.run_episode pending Docker sandbox integration"
-        )
+        """Run a single Claude-Code episode in a Docker sandbox.
+
+        Steps:
+
+        1. Materialize ``policy`` to disk inside ``repo_path``.
+        2. Create a fresh sandbox tmp dir for CI artifacts.
+        3. Run a wrapper script inside the container that:
+           a. Calls Claude Code with ``task.prompt``.
+           b. Runs the repo's CI (``pytest``, ``ruff``, ``mypy``, ``coverage``).
+           c. Writes artifact files (pytest.json, coverage.xml, ruff.json,
+              mypy.txt) under ``/artifacts``.
+        4. Build a :class:`Trajectory` from the container's stdout/stderr and
+           the path-stamped artifact files.
+
+        The trajectory's ``raw_ci_output`` is the concatenation of the
+        wrapper's stdout + stderr; the verifier reads its inputs from the
+        artifact files (paths attached as :class:`Trajectory` metadata).
+        """
+        repo_path = Path(repo_path)
+        await self.write_policy(repo_path, policy)
+        start = time.monotonic()
+        events: list[TraceEvent] = []
+
+        async with docker_sandbox(image, repo_path) as artifact_dir:
+            wrapper_cmd = [
+                "bash",
+                "-lc",
+                _EPISODE_WRAPPER.format(prompt=_shell_escape(task.prompt)),
+            ]
+            extra_env: dict[str, str] = {}
+            if anthropic_api_key:
+                extra_env["ANTHROPIC_API_KEY"] = anthropic_api_key
+
+            result = await run_in_sandbox(
+                image,
+                repo_path,
+                artifact_dir,
+                wrapper_cmd,
+                timeout_s=timeout_s,
+                extra_env=extra_env,
+            )
+
+            files_changed = _collect_diff_files(repo_path)
+            events.append(
+                TraceEvent(
+                    timestamp=time.monotonic() - start,
+                    kind="exit",
+                    payload={"exit_code": result.exit_code, "duration_s": result.duration_s},
+                )
+            )
+
+            return Trajectory(
+                task=task,
+                policy=policy,
+                events=events,
+                files_changed=files_changed,
+                exit_code=result.exit_code,
+                duration_s=result.duration_s,
+                raw_ci_output=result.stdout + "\n" + result.stderr,
+                raw_test_output=result.stdout,
+                metadata={
+                    "artifact_dir": str(artifact_dir),
+                    "pytest_report_json": str(artifact_dir / "pytest.json"),
+                    "coverage_xml": str(artifact_dir / "coverage.xml"),
+                    "ruff_json": str(artifact_dir / "ruff.json"),
+                    "mypy_output": str(artifact_dir / "mypy.txt"),
+                },
+            )
 
 
 def _stable_version(artifacts: list[Artifact]) -> str:
@@ -170,3 +245,52 @@ def _serialize_artifact(art: Artifact) -> dict[str, Any]:
         "content_hash": art.content_hash,
         "metadata": art.metadata,
     }
+
+
+# In-container wrapper that runs Claude Code, then CI, and emits artifact files
+# at the standard locations the verifier expects under ``/artifacts``.
+_EPISODE_WRAPPER = r"""
+set -uo pipefail
+mkdir -p /artifacts
+PROMPT={prompt}
+echo "[carl] running claude code"
+claude-code --print "$PROMPT" > /artifacts/agent_output.txt 2>&1 || true
+
+echo "[carl] running pytest"
+pytest --json-report --json-report-file=/artifacts/pytest.json -q || true
+
+echo "[carl] running coverage"
+coverage xml -o /artifacts/coverage.xml || true
+
+echo "[carl] running ruff"
+ruff check --output-format=json . > /artifacts/ruff.json 2>/dev/null || true
+
+echo "[carl] running mypy"
+mypy . > /artifacts/mypy.txt 2>&1 || true
+"""
+
+
+def _shell_escape(text: str) -> str:
+    """Escape ``text`` for embedding inside a single-quoted shell argument."""
+    return "'" + text.replace("'", "'\\''") + "'"
+
+
+def _collect_diff_files(repo_path: Path) -> list[str]:
+    """Best-effort: list the files git considers dirty after the episode.
+
+    Falls back to an empty list if the repo isn't a git repo (which should
+    never happen in production but happens in tests with synthetic dirs).
+    """
+    import subprocess
+
+    try:
+        out = subprocess.check_output(
+            ["git", "diff", "--name-only"], cwd=str(repo_path), text=True, stderr=subprocess.DEVNULL
+        )
+        return [line.strip() for line in out.splitlines() if line.strip()]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+
+
+def _which_or_none(binary: str) -> str | None:
+    return shutil.which(binary)

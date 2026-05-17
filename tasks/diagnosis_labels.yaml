@@ -1,0 +1,129 @@
+# 30 hand-labeled failure cases used to validate the diagnosis agent.
+#
+# Each row: a stylized failed-trajectory description and the *correct*
+# artifact attribution. Used by experiments/eval_diagnosis.py to compute
+# top-1 / top-3 accuracy for the diagnosis agent vs baselines.
+# Top-1 accuracy of CARL diagnosis vs random / most-recently-edited heuristic
+# is one of the headline numbers in the paper (E4).
+
+cases:
+  - id: diag001
+    failure_summary: "agent ran ruff but kept ignoring E501 line-length errors despite project rule"
+    correct_artifact_type: rules
+    correct_artifact_name: CLAUDE.md
+  - id: diag002
+    failure_summary: "agent created tests using `unittest` even though skill says use pytest"
+    correct_artifact_type: skill
+    correct_artifact_name: testing-policy
+  - id: diag003
+    failure_summary: "agent forgot to call the `reviewer` sub-agent before submitting"
+    correct_artifact_type: agent
+    correct_artifact_name: reviewer
+  - id: diag004
+    failure_summary: "pre-commit hook never ran because hook lost executable bit"
+    correct_artifact_type: hook
+    correct_artifact_name: pre-commit
+  - id: diag005
+    failure_summary: "agent tried to use `curl_internet` tool which should be disallowed"
+    correct_artifact_type: mcp_config
+    correct_artifact_name: settings.json
+  - id: diag006
+    failure_summary: "agent used /explain command but command file is malformed"
+    correct_artifact_type: command
+    correct_artifact_name: explain
+  - id: diag007
+    failure_summary: "no project rules → agent generated AI-flavored code without project conventions"
+    correct_artifact_type: rules
+    correct_artifact_name: CLAUDE.md
+  - id: diag008
+    failure_summary: "agent committed without running the pre-commit hook"
+    correct_artifact_type: hook
+    correct_artifact_name: pre-commit
+  - id: diag009
+    failure_summary: "skill mentions running `pytest` but doesn't say `--strict-markers`; agent made up custom marker"
+    correct_artifact_type: skill
+    correct_artifact_name: testing-policy
+  - id: diag010
+    failure_summary: "agent kept calling `bash` even though disallowed list contains it"
+    correct_artifact_type: mcp_config
+    correct_artifact_name: settings.json
+  - id: diag011
+    failure_summary: "reviewer sub-agent failed to flag a missing test (rationale lacked evidence_refs)"
+    correct_artifact_type: agent
+    correct_artifact_name: reviewer
+  - id: diag012
+    failure_summary: "agent edited reward code from inside an episode; project rule forbids this"
+    correct_artifact_type: rules
+    correct_artifact_name: CLAUDE.md
+  - id: diag013
+    failure_summary: "skill instructs to use pytest but doesn't enforce coverage measurement"
+    correct_artifact_type: skill
+    correct_artifact_name: testing-policy
+  - id: diag014
+    failure_summary: "post-edit hook didn't run mypy"
+    correct_artifact_type: hook
+    correct_artifact_name: pre-commit
+  - id: diag015
+    failure_summary: "agent invoked a tool that's neither in `allowed` nor `disallowed`"
+    correct_artifact_type: mcp_config
+    correct_artifact_name: settings.json
+  - id: diag016
+    failure_summary: "/explain output exceeded 200-word target because command spec is vague"
+    correct_artifact_type: command
+    correct_artifact_name: explain
+  - id: diag017
+    failure_summary: "agent fabricated a fake function and the rules don't forbid fabrication"
+    correct_artifact_type: rules
+    correct_artifact_name: CLAUDE.md
+  - id: diag018
+    failure_summary: "skill missing — agent had no guidance on the new dataclass conventions"
+    correct_artifact_type: skill
+    correct_artifact_name: dataclass-style
+  - id: diag019
+    failure_summary: "reviewer sub-agent gave 'approve' verdict despite locality budget violation"
+    correct_artifact_type: agent
+    correct_artifact_name: reviewer
+  - id: diag020
+    failure_summary: "shellcheck failed on hook script during gate"
+    correct_artifact_type: hook
+    correct_artifact_name: pre-commit
+  - id: diag021
+    failure_summary: "agent used GPT-5.5 even though project setting pins claude-opus-4-7"
+    correct_artifact_type: mcp_config
+    correct_artifact_name: settings.json
+  - id: diag022
+    failure_summary: "/refactor command lacks a precondition section so agent refactored too aggressively"
+    correct_artifact_type: command
+    correct_artifact_name: refactor
+  - id: diag023
+    failure_summary: "rules don't mention required test isolation; agent leaked state across tests"
+    correct_artifact_type: rules
+    correct_artifact_name: CLAUDE.md
+  - id: diag024
+    failure_summary: "skill lacks examples for writing async tests"
+    correct_artifact_type: skill
+    correct_artifact_name: testing-policy
+  - id: diag025
+    failure_summary: "attributor sub-agent missed cross-file evidence"
+    correct_artifact_type: agent
+    correct_artifact_name: attributor
+  - id: diag026
+    failure_summary: "post-test hook failed to upload coverage report"
+    correct_artifact_type: hook
+    correct_artifact_name: pre-commit
+  - id: diag027
+    failure_summary: "settings allow `delete` tool which let agent remove failing tests"
+    correct_artifact_type: mcp_config
+    correct_artifact_name: settings.json
+  - id: diag028
+    failure_summary: "/explain command output too short — exposed missing length floor"
+    correct_artifact_type: command
+    correct_artifact_name: explain
+  - id: diag029
+    failure_summary: "rules say 'never edit reward code' but allow editing tests of reward code"
+    correct_artifact_type: rules
+    correct_artifact_name: CLAUDE.md
+  - id: diag030
+    failure_summary: "skill provides incorrect import path for the buffer schema"
+    correct_artifact_type: skill
+    correct_artifact_name: dataclass-style
