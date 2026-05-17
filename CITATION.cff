@@ -6,9 +6,6 @@ authors:
   - family-names: Zimina
     given-names: Anni
     affiliation: Stanford University
-  - family-names: Javadli
-    given-names: Orkhan
-    affiliation: hAip
 repository-code: "https://github.com/anni-stanford/carl"
 license: MIT
 keywords:

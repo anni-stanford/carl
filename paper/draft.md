@@ -1,6 +1,6 @@
 # CARL: Cross-IDE Reinforcement of Coding Agent Configuration via CI/CD-Signaled Updates over Text-Space Policy Artifacts
 
-**Anni Zimina** (Stanford CS153 Spring 2026) · **Orkhan Javadli** (hAip)
+**Anni Zimina** — Stanford CS153 Spring 2026
 
 > **Numbers in this draft are placeholders.** Experiment scripts in `experiments/` overwrite tables and figures. No fabricated results.
 

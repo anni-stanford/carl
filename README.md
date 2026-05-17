@@ -8,10 +8,9 @@
 
 CARL ≠ fine-tuning model weights. CARL is RL with **text-space policy parameters**. The contribution is the **transposition** of the 2026 post-training RL stack — RLVR, GRPO group-relative scoring, DPO preference optimization, contextual bandits — to the artifacts that condition a coding agent (CLAUDE.md, `.claude/skills`, sub-agents, hooks, MCP config, `.cursor/rules`, `.cursor/skills`). Every promotion is gated by a paired-bootstrap 95 % CI lower bound > 0 on a held-out probe set.
 
-## Attribution (CRediT-style)
+## Author
 
-- **Anni Zimina** — experimental design, RL stack implementation, statistical analysis, paper writing. Stanford CS153 Spring 2026, project lead.
-- **Orkhan Javadli** (co-founder/CTO, hAip) — architecture review, related-work synthesis, production-deployment guidance.
+**Anni Zimina** — Stanford CS153 Spring 2026 final project (research track).
 
 ## Quickstart — Claude Code
 
@@ -98,14 +97,14 @@ bash scripts/run_all.sh
 
 ## AI usage disclosure
 
-CARL was scaffolded with Cursor IDE (Composer 2 + Claude Opus 4.7). All experimental design, statistical analysis, paper writing, and final code review by Anni Zimina. Architecture review by Orkhan Javadli.
+CARL was scaffolded with Cursor IDE (Composer 2 + Claude Opus 4.7). All experimental design, RL stack implementation, statistical analysis, paper writing, and final code review by Anni Zimina.
 
 ## Citation
 
 ```bibtex
 @misc{zimina2026carl,
   title  = {CARL: Cross-IDE Reinforcement of Coding Agent Configuration via CI/CD-Signaled Updates over Text-Space Policy Artifacts},
-  author = {Zimina, Anni and Javadli, Orkhan},
+  author = {Zimina, Anni},
   year   = {2026},
   note   = {Stanford CS153 Spring 2026 final project},
   url    = {https://github.com/anni-stanford/carl}
