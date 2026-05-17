@@ -12,12 +12,29 @@ CARL ≠ fine-tuning model weights. CARL is RL with **text-space policy paramete
 
 **Anni Zimina** — Stanford CS153 Spring 2026 final project (research track).
 
-## Quickstart — one supershort command
+## Quickstart — one pasteable command
 
-From inside any git repo with a Python test suite:
+From inside any git repo with a Python test suite, paste this one line:
 
 ```bash
-pip install carl-loop
+curl -sSL https://raw.githubusercontent.com/anni-stanford/carl/main/scripts/quickstart.sh | bash
+```
+
+That single line:
+
+1. Installs `carl-loop` (from GitHub until the May 28 PyPI publish).
+2. Detects your environment.
+3. **If** `ANTHROPIC_API_KEY` is set **and** Docker is running, builds the episode image (one-time, ~3 min) and runs `carl auto` end-to-end with real Claude Code episodes against your repo.
+4. **Otherwise** runs `carl auto --dry-run` so you see the full pipeline shape and a real `CARL_REPORT.md` without any external dependency.
+
+Either way you end up with `CARL_REPORT.md` next to where you ran the command.
+
+If you prefer to run the steps yourself:
+
+```bash
+pip install git+https://github.com/anni-stanford/carl.git    # one-time
+carl auto --dry-run                                          # no Docker, no API key
+# or, for a real run:
 docker build -t carl/episode-claude:latest -f docker/Dockerfile.episode.claude .
 export ANTHROPIC_API_KEY=...
 carl auto
