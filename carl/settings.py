@@ -47,7 +47,7 @@ class PromotionGateConfig(BaseModel):
 
     n_resamples: int = 10_000
     confidence: float = 0.95
-    min_probe_tasks: int = 20
+    min_probe_tasks: int = 30  # n ≥ 30 — conventional threshold for credible bootstrap CIs
     require_ci_lower_bound_above: float = 0.0
 
 
