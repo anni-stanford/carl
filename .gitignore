@@ -17,10 +17,10 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# --- Virtual envs ---
-.venv/
-venv/
-env/
+# --- Virtual envs (root-only matches; do NOT shadow carl/env or .github/env etc.) ---
+/.venv/
+/venv/
+/env/
 
 # --- Node / TypeScript ---
 node_modules/
