@@ -35,7 +35,7 @@ class JudgeConfig(BaseModel):
 
     primary_model: str = "claude-opus-4-7"
     rotation_models: list[str] = Field(
-        default_factory=lambda: ["gpt-5.5", "composer-2", "claude-sonnet-4-6"]
+        default_factory=lambda: ["gpt-5.5", "claude-sonnet-4-6"]
     )
     position_flip: bool = True
     consistent_only: bool = True
@@ -64,9 +64,7 @@ class CARLConfig(BaseModel):
 
     mutator_model: str = "claude-opus-4-7"
     diagnosis_model: str = "claude-opus-4-7"
-    cursor_default_model: str = "composer-2"
 
-    use_cloud_episodes: bool = False
     episode_timeout_s: int = 1800
 
     verifier_weights: VerifierWeights = Field(default_factory=VerifierWeights)

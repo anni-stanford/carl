@@ -1,37 +1,45 @@
-# CS153 Project Milestone — Week 7 (due Sunday May 17, 2026, 11:59 PM)
+# CS 153 Project Milestone
 
-> Submission for the Project Milestone form.
+Anni Zimina, May 17 2026.
 
-## Q1 — Project Title (0.5 pts)
+## Q1. Project title
 
-**CARL: Continuous Agent Reinforcement Loop** — a cross-IDE open-source RL framework that continuously reinforces a coding agent's text-space policy (`CLAUDE.md`, `.claude/skills`, sub-agents, hooks, settings, `.cursor/rules`) using reward extracted from CI/CD outcomes on real repositories. Day-1 support for Claude Code and Cursor; `PolicyAdapter` pattern for future agents.
+CARL: a reinforcement learning framework that improves Claude Code's `CLAUDE.md`, `.claude/skills/`, sub-agents, hooks, and `settings.json` by running episodes against real repositories and scoring the outcome with the project's CI pipeline.
 
-## Q2 — Project Track (0.5 pts)
+## Q2. Project track
 
-**Research.**
+Research.
 
-## Q3 — Progress (1.5 pts)
+## Q3. Progress
 
-We have built CARL's open-source repository (`github.com/anni-stanford/carl`, MIT, Python 3.11 + TypeScript bridge) end-to-end at the algorithm level. The IDE-agnostic `Policy` / `Artifact` / `PolicyDiff` data model, `PolicyAdapter` ABC, and `read_policy` / `write_policy` for both Claude Code and Cursor adapters round-trip with `policy_hash` parity. The full reward stack is implemented: deterministic RLVR verifier (pytest / coverage / ruff / mypy / bandit parsing with weight renormalization), bias-controlled LLM judge (position-flip + family-rotation across `claude-opus-4-7` ↔ `gpt-5.5` ↔ `composer-2` ↔ `claude-sonnet-4-6` + rubric-shuffle), 6-pattern reward-hacking probe detector, and composite reward with the judge-gate anti-hacking property (LLM judge cannot rescue a CI-failing trajectory). The four-technique stack — GRPO-style group-relative advantage scorer, Thompson-sampling contextual bandit, DPO-style preference ranker, and the paired-bootstrap promotion gate (`scipy.stats.bootstrap` BCa, 10 000 resamples, `n ≥ 30` minimum, CI-lower-bound > 0 criterion) — is implemented. Pydantic-validated structured-output diagnosis agent and locality-bounded mutation proposer are wired into `carl.loop.carl_step`. The Streamlit dashboard reads from a SQLite replay buffer with five views. A 30-case reward-hacking probe set and a 30-case hand-labeled diagnosis validation set are committed. **66/66 unit + integration tests pass; ruff and mypy `--strict` clean across 37 source files.** Real-data experiments require a Docker daemon, an Anthropic API key, and a target repo with a CI pipeline; these resources are scheduled for the May 25–29 final-deliverable window.
+The repo is at github.com/anni-stanford/carl. Most of the algorithmic stack is in and working: an RLVR-style verifier that parses real pytest reports, coverage XML, ruff JSON, and mypy output and renormalizes its weights when a signal is missing; an LLM-judge with position-flip, family rotation across Claude Opus, GPT-5.5, and Claude Sonnet, and rubric-shuffle for bias control; six-pattern adversarial reward-hacking probes; a GRPO-style group-relative advantage scorer; a Thompson-sampling contextual bandit; a Pydantic-validated structured-output diagnosis agent; a locality-bounded mutation proposer; a DPO-style preference ranker; an `apply_diff` function that actually edits the on-disk `CLAUDE.md` and `.claude/skills/` files when a candidate clears the gate; and the paired-bootstrap promotion gate itself, which uses scipy's BCa bootstrap with 10,000 resamples and only promotes when the 95 % CI lower bound on the per-task reward lift exceeds zero. There is a single command, `carl auto`, that runs the whole pipeline end-to-end: it benchmarks the user's current `CLAUDE.md` on a small task set (n=10 paired tasks by default), runs training episodes during which CARL evolves the `CLAUDE.md` and skills, benchmarks again on the same tasks, runs the gate, and writes a markdown report with the lift number, CI bounds, p-value, decomposition, and the diff history of what changed. 83 unit and integration tests pass under Python 3.11 and 3.12, `ruff` and `mypy --strict` are clean across 43 source files, and CI is green on the latest commit (`52de879`, although there's also a more recent fix to make `python -m carl` work without `PATH` munging). The thing I have not done yet is the real-data run: building the `carl/episode-claude:latest` Docker image, wiring it to my Anthropic API key, and producing real numbers to replace the placeholders in the results table.
 
-## Q4 — Future Implementation (2 pts) — concrete plan, May 17 → May 29
+## Q4. Future implementation
 
-- **May 17–20.** Docker sandbox + Claude Code episode runner end-to-end on one repo. Cursor adapter via `@cursor/sdk` JSON-RPC bridge (stub-quality first).
-- **May 21–24.** Reward stack (`verifier.py` for RLVR; `judge.py` with position-flipped and family-rotated judges; `hack_probe.py` for reward-hacking defenses; `composite.py` weighted reward). Postgres + pgvector replay buffer. Diagnosis agent v1 with a 50-case human-labeled validation set for attribution accuracy. Mutation proposer with ≤ 5-line locality budget. Paired-bootstrap promotion gate (10 000 resamples, CI lower bound > 0).
-- **May 25–27.** Main async loop wired. Thompson-sampling bandit. Streamlit dashboard with reward curves and policy-diff history. One full CARL run on a real Python repo (FastAPI or httpx), ≈ 30 episodes.
-- **May 28–29.** Experiment **E1** (CARL vs stock baseline, paired bootstrap). **E2** (no-diagnosis ablation). **E8** (reward-hacking probes). Paper draft with placeholder tables filled by experiment scripts. README polish. PyPI release of `carl-loop`. npm release of `@carl-loop/cursor`. 3-minute demo video.
+Between now and May 29 I am planning to do exactly the real-data run that the milestone is missing.
 
-Stretch goals (cross-IDE transfer **E7** and TypeScript transfer **E6**) are deferred to v0.2.
+May 18 to 22 is for getting one real episode to run end-to-end. The Dockerfile is committed at `docker/Dockerfile.episode.claude` but I have not actually built and tested it on my laptop yet. I'll install the Claude Code CLI in the image (the npm package is `@anthropic-ai/claude-code`), confirm the in-container wrapper produces the expected pytest JSON / coverage XML / ruff JSON / mypy output files in the artifact mount, and then run a single episode on a small Python repo (probably FastAPI or httpx) to confirm the trajectory, the verifier, and the buffer all see what they expect.
 
-## Q5 — GitHub Link (0.5 pts)
+May 23 to 25 is the main experiment. I'll register the FastAPI repo, queue 30 paired tasks (mostly drawn from real closed GitHub issues so they have known-good solutions for verifier comparison), run the stock-Claude-Code baseline on all 30, then run 50 training episodes during which CARL proposes and gates `CLAUDE.md` and skill changes, then re-run all 30 against the evolved policy. The output is the paired-rewards table that goes into `experiments/ab_compare.py` and produces the headline E1 row with mean lift, BCa CI, and p-value.
 
-`https://github.com/anni-stanford/carl`
+May 26 to 27 is for two ablations: I'll re-run the same 30 paired tasks with the diagnosis agent disabled (random artifact selection) and with the reward-hacking penalty disabled (no `r_hack` term). Each ablation gets its own paired-bootstrap CI against full-CARL, which gives a per-technique contribution number for the paper.
 
-## Q6 — Compute (0 pts)
+May 28 is for paper writing — replacing every placeholder in `paper/draft.md` with real numbers from the buffer, regenerating the dashboard screenshots, and writing the limitations section against what the experiments actually showed (rather than what I expect them to show). May 29 is for recording the 3-minute demo video, tagging `v0.1.0`, and publishing `carl-loop` on PyPI so `pip install carl-loop` works without git.
 
-- **Anthropic API** for Claude Opus 4.7 (mutator + judge + diagnosis). Estimated 3 000–5 000 calls @ ≈ $0.40 average → **≈ $1.5–2 K**.
-- **Anysphere Cursor SDK** credits for cloud VM episode execution. Estimated 200–400 cloud-VM hours → **≈ $300–500** (have credits).
-- **Cloudflare Workers AI** for open-source-model judge ablation. Estimated **$1–2 K of the $50 K cap**, used for family-rotation in the LLM judge.
-- **DigitalOcean** droplets for Postgres + pgvector replay buffer and dashboard hosting: ≈ $60/mo of the $250 credit.
+I am deliberately not attempting cross-language transfer, full SWE-Bench Verified, or the DPO classifier (replacing the v1 structured-prompt ranker) within this window. Those experiments need more compute time and would risk under-powering the headline result. The README and `paper/draft.md` flag them as v0.2 work.
 
-**Total estimated cost: $3–5 K**, well within available compute credits. **No GPU training is required** because CARL operates on the text-artifact policy, not on model weights.
+## Q5. Github link
+
+https://github.com/anni-stanford/carl
+
+The README's quickstart is one shell line: a `curl ... | bash` that auto-installs and runs `carl auto` against the current directory, falling back to `--dry-run` if the user does not have Docker or an Anthropic API key. There is also a manual three-step path for users who want to read the installer first. The repo's `paper/milestone_may17.md` mirrors this document.
+
+## Q6. Compute
+
+I do not need a GPU cluster. CARL operates on text artifacts, not on model weights. The estimated cost across the May 17 to 29 window is around $3-5K, all comfortably inside the available student credits.
+
+The bulk of the cost is Anthropic API for Claude Opus 4.7, used as the mutator, the LLM judge, and the diagnosis agent. I estimate 3,000 to 5,000 calls at roughly $0.40 average, so $1.5-2K. The Cloudflare for Startups program gives me $50K of Workers AI credits and I expect to use $1-2K of that for the open-weight family-rotation in the LLM judge (this is the bias-control mechanism that lets me defend against same-family judge-mutator collusion). DigitalOcean's $250 student credit covers the SQLite replay buffer host and the Streamlit dashboard for around $60 a month during the window. If I had to allocate one extra ask, it would be additional Anthropic API budget in case the real run needs more than the planned 80 episodes; the rest is sufficient.
+
+---
+
+*AI usage disclosure (CS 153 AI Policy):* I used large-language-model coding assistants to help draft initial scaffolding code, documentation, and test fixtures. The design decisions, the RL stack implementation, the statistical methodology, the experimental analysis, the paper writing, and the final code review are mine.

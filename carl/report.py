@@ -110,7 +110,7 @@ held-out probe set during training.
 
 - **Reward.** Composite scalar in [0, 1]: `r = 0.65 r_verifier + 0.25 r_judge − 0.10 r_hack`.
 - **Verifier (RLVR).** Deterministic CI parser: pytest exit + per-test JSON, coverage XML delta, ruff JSON diagnostics, mypy errors, optional bandit findings. Weights renormalize when a signal is absent.
-- **Judge (RLAIF).** LLM reviewer with position-flipped pairwise comparisons, family-rotated calls across `claude-opus-4-7` ↔ `gpt-5.5` ↔ `composer-2` ↔ `claude-sonnet-4-6`, and deterministic rubric-shuffle. Inter-judge agreement reported.
+- **Judge (RLAIF).** LLM reviewer with position-flipped pairwise comparisons, family-rotated calls across `claude-opus-4-7` ↔ `gpt-5.5` ↔ `claude-sonnet-4-6`, and deterministic rubric-shuffle. Inter-judge agreement reported.
 - **Hack probes.** Six-pattern detector (try/except around pytest, commented assertions, blanket pytest skip, hook touches CI runner, ignored exit codes, trivial `assert True`).
 - **Promotion gate.** Paired bootstrap, BCa CI, 10 000 resamples, n ≥ 30, lower-bound > 0 criterion.
 - **Reproducibility.** Re-run with `carl auto --buffer {Path('carl_run/buffer.sqlite')!s}`.

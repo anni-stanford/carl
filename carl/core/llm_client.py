@@ -1,4 +1,4 @@
-"""Abstract LLM client interface — keeps Opus / GPT / Composer behind one type.
+"""Abstract LLM client interface — keeps Opus, Sonnet, and GPT behind one type.
 
 Three concrete implementations live here:
 
@@ -50,8 +50,8 @@ class LLMClient(ABC):
         """Return the family bucket for ``model`` (used for rotation enforcement).
 
         Examples: ``"anthropic"`` for any ``claude-*`` model, ``"openai"`` for
-        ``gpt-*``, ``"anysphere"`` for ``composer-*``, ``"open"`` for any local
-        / open-weight model served via Cloudflare Workers AI.
+        ``gpt-*``, ``"open"`` for any local / open-weight model served via
+        Cloudflare Workers AI.
         """
 
 
@@ -101,8 +101,6 @@ class FakeLLMClient(LLMClient):
             return "anthropic"
         if model.startswith("gpt-"):
             return "openai"
-        if model.startswith("composer-"):
-            return "anysphere"
         return "unknown"
 
     @property

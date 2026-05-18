@@ -23,7 +23,7 @@ Each normalized to `[0, 1]`; weighted sum → `r_verifier ∈ [0, 1]`.
 LLM reviewer score with **all** of:
 
 - **Position-flip**: `(A, B)` and `(B, A)`; only consistent wins counted.
-- **Family rotation**: `claude-opus-4-7` ↔ `gpt-5.5` ↔ `composer-2` ↔ `claude-sonnet-4-6`.
+- **Family rotation**: `claude-opus-4-7` ↔ `gpt-5.5` ↔ `claude-sonnet-4-6`. Open-weight models served via Cloudflare Workers AI also slot into the rotation when configured.
 - **Rubric-shuffle**: shuffled order of rubric items between calls.
 - **CI gating**: `r_judge` is only used when `r_verifier ≥ τ`; otherwise force `r_judge = 0`.
 - **Inter-judge agreement** is reported; high variance flags get audited.

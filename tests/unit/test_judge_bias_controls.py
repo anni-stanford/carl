@@ -29,7 +29,7 @@ def parts() -> JudgePromptParts:
 def cfg() -> JudgeConfig:
     return JudgeConfig(
         primary_model="claude-opus-4-7",
-        rotation_models=["gpt-5.5", "composer-2"],
+        rotation_models=["gpt-5.5", "claude-sonnet-4-6"],
         position_flip=True,
         consistent_only=True,
         rubric_shuffle=True,
@@ -42,7 +42,7 @@ async def test_absolute_score_invokes_every_family(parts: JudgePromptParts, cfg:
     # primary + 2 rotation = 3 models; with rubric_shuffle each model gets 2 calls = 6 total
     assert client.call_count == 6
     families_called = {client.family(model) for model, _ in client.calls}
-    assert families_called == {"anthropic", "openai", "anysphere"}
+    assert families_called == {"anthropic", "openai"}
     assert 0.6 < out.score < 0.8
     assert 0 <= out.inter_judge_agreement <= 1
 

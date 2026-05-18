@@ -5,16 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "carl-loop"
 version = "0.1.0"
-description = "Cross-IDE RL framework for coding agent configuration — RLVR + GRPO + DPO + bandits over text-space policy artifacts"
+description = "RL framework for Claude Code configuration — RLVR + GRPO + DPO + bandits over CLAUDE.md, skills, sub-agents, hooks, and settings"
 readme = "README.md"
 authors = [{ name = "Anni Zimina", email = "zimina@stanford.edu" }]
 license = { text = "MIT" }
 requires-python = ">=3.11"
 keywords = [
     "reinforcement-learning",
-    "coding-agents",
     "claude-code",
-    "cursor",
+    "claude-md",
     "rlvr",
     "grpo",
     "dpo",
@@ -64,14 +63,11 @@ dev = [
     "mypy>=1.11",
     "shellcheck-py>=0.10",
 ]
-cursor = []
-
 [project.scripts]
 carl = "carl.cli:main"
 
 [project.entry-points."carl.adapters"]
 claude_code = "carl.adapters.claude_code:ClaudeCodeAdapter"
-cursor = "carl.adapters.cursor:CursorAdapter"
 
 [project.urls]
 Homepage = "https://github.com/anni-stanford/carl"

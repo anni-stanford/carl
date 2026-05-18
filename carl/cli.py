@@ -1,13 +1,11 @@
-"""CARL command-line interface — ``carl init|run|status|gate``.
+"""CARL command-line interface — ``carl auto|init|run|status|gate``.
 
-Implements the four commands the README documents. ``init`` scaffolds a
-baseline policy (``CLAUDE.md`` or ``.cursor/rules``) into the target repo.
-``run`` calls :func:`carl.loop.carl_loop` over a single repo + a small
-manifest of tasks; without an ``ANTHROPIC_API_KEY`` it errors clearly.
-``status`` reads the SQLite replay buffer and prints summary statistics.
-``gate`` runs the paired-bootstrap promotion gate on already-collected
-rewards (this is the same logic as ``experiments.ab_compare``, exposed
-under the ``carl`` entry point for convenience).
+Implements the five commands the README documents. ``auto`` is the
+end-to-end one-command pipeline; ``init`` scaffolds a baseline
+``CLAUDE.md`` + ``.claude/skills/`` policy into the target repo;
+``run`` drives the CARL learning loop over user-supplied tasks;
+``status`` reads the SQLite replay buffer; ``gate`` runs the
+paired-bootstrap promotion gate on already-collected rewards.
 """
 
 from __future__ import annotations
@@ -62,8 +60,6 @@ def auto(
     Real run requires a git repo, a running Docker daemon, and ANTHROPIC_API_KEY.
     Use ``--dry-run`` to validate the pipeline against synthetic rewards.
     """
-    import asyncio
-
     from carl.auto import AutoOptions, run_auto
 
     opts = AutoOptions(
@@ -80,7 +76,11 @@ def auto(
     click.echo("")
     click.echo("=" * 78)
     click.echo(f"  CARL — {decision}")
-    click.echo(f"  mean lift: {result.gate.mean_lift:+.4f}   95 % CI [{result.gate.ci_low:+.4f}, {result.gate.ci_high:+.4f}]   p={result.gate.p_value:.4f}   n={result.gate.n_tasks}")
+    click.echo(
+        f"  mean lift: {result.gate.mean_lift:+.4f}   "
+        f"95 % CI [{result.gate.ci_low:+.4f}, {result.gate.ci_high:+.4f}]   "
+        f"p={result.gate.p_value:.4f}   n={result.gate.n_tasks}"
+    )
     click.echo(f"  promotions during training: {len(result.promoted)}")
     click.echo(f"  report: {result.report_path}")
     click.echo("=" * 78)
@@ -91,27 +91,14 @@ def auto(
 
 @main.command()
 @click.option(
-    "--adapter",
-    type=click.Choice(["claude_code", "cursor"]),
-    required=True,
-    help="Which IDE adapter to scaffold.",
-)
-@click.option(
     "--repo",
     type=click.Path(file_okay=False, path_type=Path),
     default=Path("."),
     show_default=True,
 )
-def init(adapter: str, repo: Path) -> None:
-    """Write a baseline policy (CLAUDE.md or .cursor/rules) into ``--repo``.
-
-    The seed policy is a minimal but real artifact set: project rules, one
-    skill, and (for Claude Code) a sample sub-agent. CARL will refine these
-    as episodes accumulate.
-    """
-    from carl.adapters.base import PolicyAdapter
+def init(repo: Path) -> None:
+    """Write a baseline policy (``CLAUDE.md`` + ``.claude/skills/testing-policy``) into ``--repo``."""
     from carl.adapters.claude_code import ClaudeCodeAdapter
-    from carl.adapters.cursor import CursorAdapter
     from carl.core.policy.artifacts import Artifact, ArtifactType, Policy
 
     repo = Path(repo).resolve()
@@ -129,30 +116,18 @@ def init(adapter: str, repo: Path) -> None:
         "When writing or modifying tests, prefer pytest. Mark slow tests with\n"
         "`@pytest.mark.slow`. Assert behavior, not implementation details.\n"
     )
+    policy = Policy(
+        artifacts=[
+            Artifact(name="CLAUDE.md", type=ArtifactType.RULES, content=rules_seed),
+            Artifact(name="testing-policy", type=ArtifactType.SKILL, content=skill_seed),
+        ],
+        version="seed",
+    )
 
-    ad: PolicyAdapter
-    if adapter == "claude_code":
-        ad = ClaudeCodeAdapter()
-        policy = Policy(
-            artifacts=[
-                Artifact(name="CLAUDE.md", type=ArtifactType.RULES, content=rules_seed),
-                Artifact(name="testing-policy", type=ArtifactType.SKILL, content=skill_seed),
-            ],
-            version="seed",
-        )
-    else:
-        ad = CursorAdapter()
-        policy = Policy(
-            artifacts=[
-                Artifact(name="rules", type=ArtifactType.RULES, content=rules_seed),
-                Artifact(name="testing-policy", type=ArtifactType.SKILL, content=skill_seed),
-            ],
-            version="seed",
-        )
-
-    asyncio.run(ad.write_policy(repo, policy))
-    click.echo(f"[carl init] wrote {len(policy.artifacts)} seed artifact(s) for adapter={adapter}")
-    click.echo(f"[carl init] inspect with: ls -la {repo}/{'.claude' if adapter == 'claude_code' else '.cursor'}/")
+    adapter = ClaudeCodeAdapter()
+    asyncio.run(adapter.write_policy(repo, policy))
+    click.echo(f"[carl init] wrote {len(policy.artifacts)} seed artifact(s) into {repo}")
+    click.echo(f"[carl init] inspect with: ls -la {repo}/.claude/")
 
 
 # ---- carl run ----------------------------------------------------------------
@@ -160,7 +135,6 @@ def init(adapter: str, repo: Path) -> None:
 
 @main.command()
 @click.option("--repo", type=click.Path(file_okay=False, path_type=Path), default=Path("."))
-@click.option("--adapter", type=click.Choice(["claude_code", "cursor"]), default="claude_code")
 @click.option(
     "--task",
     multiple=True,
@@ -178,14 +152,8 @@ def init(adapter: str, repo: Path) -> None:
     default=True,
     help="Hard-fail if ANTHROPIC_API_KEY is unset (default). Pass --no-require-anthropic to dry-run.",
 )
-def run(repo: Path, adapter: str, task: tuple[str, ...], buffer: Path, require_anthropic: bool) -> None:
-    """Run the CARL loop over ``--repo`` with ``--adapter``.
-
-    A real run requires ``ANTHROPIC_API_KEY`` (and a Docker daemon for the
-    Claude Code adapter). Without those, the loop will refuse to start
-    rather than producing meaningless results — pass
-    ``--no-require-anthropic`` to validate the wiring without executing.
-    """
+def run(repo: Path, task: tuple[str, ...], buffer: Path, require_anthropic: bool) -> None:
+    """Run the CARL loop over ``--repo`` against the supplied ``--task`` prompts."""
     if require_anthropic and not os.environ.get("ANTHROPIC_API_KEY"):
         click.echo(
             "error: ANTHROPIC_API_KEY is not set. Real episode execution requires the\n"
@@ -199,10 +167,8 @@ def run(repo: Path, adapter: str, task: tuple[str, ...], buffer: Path, require_a
         click.echo("error: at least one --task is required", err=True)
         sys.exit(2)
 
-    from carl.adapters.base import PolicyAdapter
     from carl.adapters.base import Task as CarlTask
     from carl.adapters.claude_code import ClaudeCodeAdapter
-    from carl.adapters.cursor import CursorAdapter
     from carl.core.buffer.storage import ReplayBuffer
     from carl.loop import carl_loop
     from carl.settings import CARLConfig
@@ -211,27 +177,25 @@ def run(repo: Path, adapter: str, task: tuple[str, ...], buffer: Path, require_a
     buf = ReplayBuffer(buffer)
     cfg = CARLConfig()
 
-    adapter_obj: PolicyAdapter = (
-        ClaudeCodeAdapter() if adapter == "claude_code" else CursorAdapter()
-    )
-    initial_policy = asyncio.run(adapter_obj.read_policy(repo))
+    adapter = ClaudeCodeAdapter()
+    initial_policy = asyncio.run(adapter.read_policy(repo))
     initial_policies = {"seed": initial_policy}
 
     tasks_in = [
-        CarlTask(task_id=f"cli-{i}", repo_path=repo, prompt=t, adapter_name=adapter)
+        CarlTask(task_id=f"cli-{i}", repo_path=repo, prompt=t, adapter_name="claude_code")
         for i, t in enumerate(task)
     ]
 
     if not require_anthropic:
         click.echo(
-            f"[carl run] dry-run: would queue {len(tasks_in)} task(s) on {adapter} "
-            f"against {repo} with policy {initial_policy.version}"
+            f"[carl run] dry-run: would queue {len(tasks_in)} task(s) against {repo} "
+            f"with policy {initial_policy.version}"
         )
         return
 
     asyncio.run(
         carl_loop(
-            adapters=[adapter_obj],
+            adapters=[adapter],
             config=cfg,
             initial_policies=initial_policies,
             tasks=tasks_in,
@@ -270,10 +234,15 @@ def status(buffer: Path) -> None:
         ).fetchone()
     click.echo(f"buffer:               {buffer}")
     click.echo(f"trajectories:         {n_traj:>6}")
-    click.echo(f"policy versions seen: {len(versions)}  ({', '.join(versions[:5])}{'...' if len(versions) > 5 else ''})")
+    click.echo(
+        f"policy versions seen: {len(versions)}  "
+        f"({', '.join(versions[:5])}{'...' if len(versions) > 5 else ''})"
+    )
     click.echo(f"gate decisions:       {gates[0]} ({gates[1] or 0} promoted)")
     if last_reward:
-        click.echo(f"last reward:          {last_reward[2]:.4f} on {last_reward[1]} at {last_reward[0]}")
+        click.echo(
+            f"last reward:          {last_reward[2]:.4f} on {last_reward[1]} at {last_reward[0]}"
+        )
 
 
 # ---- carl gate ---------------------------------------------------------------

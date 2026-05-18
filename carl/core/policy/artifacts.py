@@ -1,8 +1,10 @@
-"""IDE-agnostic representation of the coding agent's text-space policy.
+"""Agent-agnostic representation of the coding agent's text-space policy.
 
-The same ``Policy`` object can be written to ``.claude/`` by the Claude Code
-adapter or to ``.cursor/`` by the Cursor adapter. Adapters own the disk
-serialization; the core RL loop never touches ``open(path, ...)``.
+The Claude Code adapter writes a ``Policy`` to ``CLAUDE.md`` plus
+``.claude/`` subdirectories. The data model is deliberately kept
+agent-agnostic so future adapters (Codex, Aider, …) can reuse it.
+Adapters own the disk serialization; the core RL loop never touches
+``open(path, ...)``.
 """
 
 from __future__ import annotations

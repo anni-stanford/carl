@@ -6,8 +6,9 @@ ruff JSON, mypy text, optional bandit JSON) into a normalized
 always produce the same score. This is the property that makes RLVR
 hack-resistant.
 
-Inputs are *paths* to artifact files so the same code works for local Docker
-runs and Cursor cloud-VM runs (we just need the artifact files copied back).
+Inputs are *paths* to artifact files so the verifier works regardless of
+where the episode actually executed (local Docker, remote sandbox, CI runner)
+as long as the artifact files end up in the expected location.
 """
 
 from __future__ import annotations

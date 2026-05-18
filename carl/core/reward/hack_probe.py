@@ -54,7 +54,7 @@ _HOOK_TOUCHES_RUNNER = (
         r"(?:rm\s+-rf?|truncate\s+-s\s+0|>\s*coverage\.xml|sed\s+-i.*pytest)", re.MULTILINE
     ),
     0.6,
-    (".claude/hooks/*.sh", ".cursor/hooks*"),
+    (".claude/hooks/*.sh",),
 )
 
 _IGNORED_EXIT_CODE = (

@@ -1,8 +1,8 @@
 """CARL Streamlit dashboard.
 
-Reads the SQLite replay buffer and renders five views: live loop status,
-reward curve over time, policy-diff history, per-episode replay, and a
-side-by-side cross-IDE comparison. Run with::
+Reads the SQLite replay buffer and renders four views: live loop status,
+reward curve over time, gate-decision (promotion) history, and per-episode
+replay. Run with::
 
     streamlit run dashboard/app.py -- --buffer carl_run/buffer.sqlite
 """
@@ -54,8 +54,8 @@ def main() -> None:
         st.warning("No trajectories in buffer yet. Run an experiment first.")
         return
 
-    tab_overview, tab_reward, tab_promotions, tab_replay, tab_cross = st.tabs(
-        ["Overview", "Reward curve", "Promotions", "Episode replay", "Cross-IDE"]
+    tab_overview, tab_reward, tab_promotions, tab_replay = st.tabs(
+        ["Overview", "Reward curve", "Promotions", "Episode replay"]
     )
 
     with tab_overview:
@@ -93,14 +93,6 @@ def main() -> None:
             tid = st.selectbox("Task ID", ids)
             view = traj[traj["task_id"] == tid]
             st.dataframe(view, use_container_width=True)
-
-    with tab_cross:
-        st.subheader("Cross-IDE reward (Claude Code vs Cursor)")
-        if "adapter_name" not in traj.columns or traj["adapter_name"].nunique() < 2:
-            st.info("Not enough cross-IDE data yet (run with both adapters).")
-        else:
-            cross = traj.groupby("adapter_name")["r_total"].mean()
-            st.bar_chart(cross)
 
 
 if __name__ == "__main__":  # pragma: no cover

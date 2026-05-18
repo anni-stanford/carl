@@ -1,6 +1,6 @@
 # CARL — The four-technique RL stack
 
-CARL transposes the canonical 2026 post-training RL stack to **text-space policy parameters**. We do **not** fine-tune model weights; we update artifacts that condition the agent (CLAUDE.md, `.claude/skills`, sub-agents, hooks, MCP config, `.cursor/rules`, `.cursor/skills`, etc.).
+CARL transposes the canonical 2026 post-training RL stack to **text-space policy parameters**. We do **not** fine-tune model weights; we update the artifacts that condition Claude Code (`CLAUDE.md`, `.claude/skills/*/SKILL.md`, `.claude/agents/*.md`, `.claude/hooks/*.sh`, `.claude/settings.json`, `.claude/commands/*.md`).
 
 ## 1. RLVR — verifiable reward backbone
 

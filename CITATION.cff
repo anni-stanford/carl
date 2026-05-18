@@ -10,9 +10,8 @@ repository-code: "https://github.com/anni-stanford/carl"
 license: MIT
 keywords:
   - reinforcement-learning
-  - coding-agents
   - claude-code
-  - cursor
+  - claude-md
   - rlvr
   - grpo
   - dpo

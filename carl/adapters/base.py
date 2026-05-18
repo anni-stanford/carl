@@ -1,8 +1,9 @@
-"""``PolicyAdapter`` — the boundary between IDE-agnostic core and IDE-specific I/O.
+"""``PolicyAdapter`` — the boundary between agent-agnostic core and agent-specific I/O.
 
-Implementations: :class:`carl.adapters.claude_code.ClaudeCodeAdapter`,
-:class:`carl.adapters.cursor.CursorAdapter`. Future agents (Codex, Aider, …)
-implement the same five methods.
+Today the only shipped adapter is
+:class:`carl.adapters.claude_code.ClaudeCodeAdapter`. The ABC is preserved
+so future agents (Codex, Aider, …) implement the same five methods and
+plug into the existing RL machinery without changing the loop.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ class Task:
     task_id: str
     repo_path: Path
     prompt: str
-    adapter_name: str  # "claude_code" | "cursor" | ...
+    adapter_name: str  # "claude_code" today; "codex"/"aider"/… in the future
     expected_diff: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -78,4 +79,4 @@ class PolicyAdapter(ABC):
 
     @abstractmethod
     def name(self) -> str:
-        """Stable adapter name (e.g. ``"claude_code"``, ``"cursor"``)."""
+        """Stable adapter name (e.g. ``"claude_code"``)."""

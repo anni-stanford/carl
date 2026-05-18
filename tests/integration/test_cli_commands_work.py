@@ -16,19 +16,11 @@ from carl.cli import main
 
 def test_init_writes_seed_policy_for_claude_code(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(main, ["init", "--adapter", "claude_code", "--repo", str(tmp_path)])
+    result = runner.invoke(main, ["init", "--repo", str(tmp_path)])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "CLAUDE.md").is_file()
     assert (tmp_path / ".claude" / "skills" / "testing-policy" / "SKILL.md").is_file()
     assert "wrote" in result.output
-
-
-def test_init_writes_seed_policy_for_cursor(tmp_path: Path) -> None:
-    runner = CliRunner()
-    result = runner.invoke(main, ["init", "--adapter", "cursor", "--repo", str(tmp_path)])
-    assert result.exit_code == 0, result.output
-    assert (tmp_path / ".cursor" / "rules").is_file()
-    assert (tmp_path / ".cursor" / "skills" / "testing-policy" / "SKILL.md").is_file()
 
 
 def test_run_dry_run_without_api_key(tmp_path: Path, monkeypatch) -> None:
@@ -36,14 +28,13 @@ def test_run_dry_run_without_api_key(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     # Seed a policy first so read_policy doesn't return empty
     runner = CliRunner()
-    init_res = runner.invoke(main, ["init", "--adapter", "claude_code", "--repo", str(tmp_path)])
+    init_res = runner.invoke(main, ["init", "--repo", str(tmp_path)])
     assert init_res.exit_code == 0
     res = runner.invoke(
         main,
         [
             "run",
             "--repo", str(tmp_path),
-            "--adapter", "claude_code",
             "--task", "Improve test coverage by 5 pp",
             "--no-require-anthropic",
         ],
@@ -59,7 +50,7 @@ def test_run_without_api_key_errors_with_clear_message(tmp_path: Path, monkeypat
     res = runner.invoke(
         main,
         [
-            "run", "--repo", str(tmp_path), "--adapter", "claude_code",
+            "run", "--repo", str(tmp_path),
             "--task", "anything",
         ],
     )

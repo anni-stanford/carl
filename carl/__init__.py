@@ -1,12 +1,12 @@
 """CARL — Continuous Agent Reinforcement Loop.
 
-Cross-IDE RL framework for coding agent configuration. RLVR + GRPO group-relative
-scoring + DPO over policy diffs + contextual bandits, applied to **text-space**
-policy artifacts (CLAUDE.md, .claude/skills, sub-agents, hooks, MCP config,
-.cursor/rules, .cursor/skills, .cursor/agents, .cursor/hooks.json).
+RL framework that improves Claude Code's text-space policy artifacts
+(CLAUDE.md, .claude/skills, .claude/agents, .claude/hooks, .claude/settings.json)
+using reward signal extracted from CI/CD outcomes on real repositories.
+RLVR + GRPO group-relative scoring + DPO over policy diffs + contextual bandits.
 
 CARL does NOT fine-tune model weights. The contribution is the *transposition*
-of the 2026 post-training RL stack to text artifacts that condition coding agents.
+of the 2026 post-training RL stack to text artifacts that condition Claude Code.
 """
 
 __version__ = "0.1.0"

@@ -1,6 +1,8 @@
 # CARL — Architecture
 
-CARL splits cleanly into an **IDE-agnostic core** and **IDE-specific adapters**.
+CARL is split into an agent-agnostic core and a Claude-Code-specific adapter.
+The ABC pattern is preserved so future agents (Codex, Aider, …) can plug into
+the same RL machinery without changing the loop.
 
 ```mermaid
 flowchart TB
@@ -13,21 +15,19 @@ flowchart TB
       R5[diagnosis · mutation · promotion · buffer]
     end
     CORE --> CC_AD[PolicyAdapter — Claude Code]
-    CORE --> CU_AD[PolicyAdapter — Cursor]
-    CC_AD --> CC[CLAUDE.md / .claude/skills / .claude/agents / .claude/hooks / settings.json]
-    CU_AD --> CU[.cursor/rules / .cursor/skills / .cursor/agents / .cursor/hooks.json / mcp.json]
+    CC_AD --> CC[CLAUDE.md / .claude/skills / .claude/agents / .claude/hooks / settings.json / .claude/commands]
 ```
 
 ## Artifact mapping
 
-| Semantic role | Claude Code path | Cursor path |
-|---|---|---|
-| Project rules / context | `CLAUDE.md` | `.cursor/rules` |
-| Skills | `.claude/skills/*/SKILL.md` | `.cursor/skills/*/SKILL.md` |
-| Sub-agents | `.claude/agents/*.md` | `.cursor/agents/*.md` |
-| Hooks | `.claude/hooks/*.sh` | `.cursor/hooks.json` |
-| MCP config | `.claude/settings.json` | `.cursor/mcp.json` |
-| Slash commands | `.claude/commands/*.md` | (n/a) |
+| Semantic role | Disk path |
+|---|---|
+| Project rules / context | `CLAUDE.md` |
+| Skills | `.claude/skills/*/SKILL.md` |
+| Sub-agents | `.claude/agents/*.md` |
+| Hooks | `.claude/hooks/*.sh` |
+| MCP / settings config | `.claude/settings.json` |
+| Slash commands | `.claude/commands/*.md` |
 
 ## Data classes
 
@@ -49,4 +49,4 @@ class PolicyAdapter(ABC):
     def name(self) -> str: ...
 ```
 
-Both adapters round-trip `read_policy(write_policy(P)) == P` (`policy_hash` parity, see `tests/unit/test_*_round_trip.py`).
+The Claude Code adapter round-trips `read_policy(write_policy(P)) == P` (`policy_hash` parity, see `tests/unit/test_claude_code_adapter_round_trip.py`).
