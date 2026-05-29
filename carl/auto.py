@@ -4,13 +4,19 @@ One-command pipeline:
     pre-flight  →  benchmark BEFORE  →  CARL training (with apply_diff)  →
     benchmark AFTER  →  paired-bootstrap gate  →  CARL_REPORT.md
 
-Two execution modes:
+Execution modes (resolved by :func:`_resolve_mode`):
 
-- ``--dry-run``: deterministic synthetic rewards. No Docker, no LLM API,
-  no network. Used by tests and demos. The shape of the report and the
-  numerical pipeline are identical to a real run.
-- (default): real Anthropic API + Docker sandbox + Claude Code CLI in the
-  episode container. Hard-fails if any prerequisite is missing.
+- ``local`` (default when the Claude Code CLI is on PATH): runs real episodes
+  with no Docker, using the user's own Claude Code authentication. The repo is
+  copied to a temp dir so the working tree is never mutated.
+- ``docker``: runs each episode in an isolated container (stronger isolation;
+  needs the carl/episode-claude image and ANTHROPIC_API_KEY).
+- ``dry-run``: deterministic synthetic rewards. No Docker, no CLI, no network.
+  Used by tests and demos; the report shape and the numerical pipeline are
+  identical to a real run.
+
+``carl auto`` never hard-fails for a missing prerequisite: it falls back to a
+clearly-labeled dry-run so the single command always produces a report.
 """
 
 from __future__ import annotations
@@ -41,9 +47,17 @@ class AutoOptions:
     n_probe: int = 10
     n_train_episodes: int = 20
     dry_run: bool = False
+    #: "auto" | "local" | "docker" | "dry-run". "auto" prefers the local
+    #: (no-Docker) runner when the Claude Code CLI is available, then Docker,
+    #: then falls back to a clearly-labeled synthetic dry-run.
+    mode: str = "auto"
     buffer_path: Path = field(default_factory=lambda: Path("carl_run/buffer.sqlite"))
     report_path: Path = field(default_factory=lambda: Path("CARL_REPORT.md"))
     rng_seed: int = 20260517
+    #: Resolved at the start of run_auto; not set by callers.
+    resolved_mode: str = ""
+    #: Path to the Claude Code CLI, resolved for local mode.
+    claude_bin: str | None = None
 
 
 @dataclass
@@ -59,8 +73,58 @@ class AutoResult:
 # ---- Public entry point -----------------------------------------------------
 
 
+def _resolve_mode(opts: AutoOptions) -> None:
+    """Resolve opts.mode into a concrete opts.resolved_mode + claude_bin.
+
+    Never hard-fails: if a real run is requested but nothing is available,
+    falls back to a clearly-labeled dry-run so the single command always
+    produces a report rather than crashing.
+    """
+    from carl.env.local_sandbox import claude_cli_available
+
+    if opts.dry_run or opts.mode == "dry-run":
+        opts.resolved_mode = "dry-run"
+        return
+
+    claude_bin = claude_cli_available()
+
+    if opts.mode == "local":
+        if claude_bin is None:
+            print(
+                "[carl auto] --mode local requested but no Claude Code CLI found "
+                "(looked for `claude`, `claude-code`, and $CARL_CLAUDE_BIN). "
+                "Falling back to --dry-run."
+            )
+            opts.resolved_mode = "dry-run"
+            return
+        opts.resolved_mode = "local"
+        opts.claude_bin = claude_bin
+        return
+
+    if opts.mode == "docker":
+        opts.resolved_mode = "docker"
+        return
+
+    # mode == "auto": prefer local (no Docker) when the CLI is present.
+    if claude_bin is not None:
+        opts.resolved_mode = "local"
+        opts.claude_bin = claude_bin
+        print(f"[carl auto] using local runner (no Docker); Claude Code CLI: {claude_bin}")
+        return
+    if _docker_available():
+        opts.resolved_mode = "docker"
+        print("[carl auto] using Docker runner")
+        return
+    print(
+        "[carl auto] no Claude Code CLI and no Docker found — running --dry-run "
+        "(synthetic rewards). Install the Claude Code CLI for a real run."
+    )
+    opts.resolved_mode = "dry-run"
+
+
 async def run_auto(opts: AutoOptions) -> AutoResult:
     """Run the full automated pipeline. Used by both ``carl auto`` and the test suite."""
+    _resolve_mode(opts)
     _preflight(opts)
     opts.buffer_path.parent.mkdir(parents=True, exist_ok=True)
     if opts.buffer_path.exists():
@@ -276,15 +340,22 @@ async def _episode_with_reward(
     policy: Policy,
     opts: AutoOptions,
 ) -> tuple[Trajectory, RewardComponents]:
-    if opts.dry_run:
+    mode = opts.resolved_mode or ("dry-run" if opts.dry_run else "docker")
+
+    if mode == "dry-run":
         return _synthetic_episode(task, policy, opts)
 
-    # Real path: run the adapter, then a stub reward (the full real reward
-    # path with the LLM judge lives behind a separate flag because it costs
-    # real money; for `carl auto` MVP the verifier alone is sufficient).
+    if mode == "local":
+        assert isinstance(adapter, ClaudeCodeAdapter)
+        assert opts.claude_bin is not None
+        traj = await adapter.run_episode_local(
+            task.repo_path, task, policy, timeout_s=1800, claude_bin=opts.claude_bin
+        )
+        return traj, _verifier_only_reward(traj)
+
+    # docker
     traj = await adapter.run_episode(task.repo_path, task, policy, timeout_s=1800)
-    reward = _verifier_only_reward(traj)
-    return traj, reward
+    return traj, _verifier_only_reward(traj)
 
 
 def _synthetic_episode(
@@ -412,35 +483,52 @@ def _next_candidate_diff(current: Policy, episode: int, opts: AutoOptions) -> Po
 # ---- Pre-flight + helpers ---------------------------------------------------
 
 
-def _preflight(opts: AutoOptions) -> None:
-    if not opts.repo_path.exists():
-        raise SystemExit(f"error: repo path does not exist: {opts.repo_path}")
-
-    if opts.dry_run:
-        return  # synthetic rewards; no external deps required
-
-    import os
-
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit(
-            "error: ANTHROPIC_API_KEY is not set. Real `carl auto` requires the\n"
-            "Anthropic API key for episode execution. Run `carl auto --dry-run` to\n"
-            "validate the pipeline shape against synthetic rewards."
-        )
+def _docker_available() -> bool:
     try:
         result = subprocess.run(
             ["docker", "info"], capture_output=True, text=True, timeout=10
         )
-        if result.returncode != 0:
-            raise SystemExit(
-                "error: Docker daemon is not running. Start Docker Desktop (or `dockerd`)\n"
-                "and retry. Run `carl auto --dry-run` to skip Docker."
-            )
+        return result.returncode == 0
     except (FileNotFoundError, subprocess.SubprocessError):
-        raise SystemExit(
-            "error: docker CLI not found on PATH. Install Docker (https://docs.docker.com/get-docker/)\n"
-            "and retry, or run `carl auto --dry-run`."
-        ) from None
+        return False
+
+
+def _preflight(opts: AutoOptions) -> None:
+    if not opts.repo_path.exists():
+        raise SystemExit(f"error: repo path does not exist: {opts.repo_path}")
+
+    mode = opts.resolved_mode
+
+    if mode in ("dry-run", ""):
+        return  # synthetic rewards; no external deps required
+
+    import os
+
+    if mode == "local":
+        # The user's Claude Code CLI carries its own auth; we don't require
+        # ANTHROPIC_API_KEY in CARL's own environment. We only warn if neither
+        # the CLI's config nor the env var is obviously present.
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            print(
+                "[carl auto] note: ANTHROPIC_API_KEY is not set in this shell. "
+                "Local mode relies on your Claude Code CLI's own authentication; "
+                "if the CLI is logged in, this is fine."
+            )
+        return
+
+    if mode == "docker":
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise SystemExit(
+                "error: docker mode needs ANTHROPIC_API_KEY in the environment "
+                "(it is passed into the container). Set it, use --mode local, or "
+                "run --dry-run."
+            )
+        if not _docker_available():
+            raise SystemExit(
+                "error: docker mode requested but the Docker daemon is not "
+                "available. Use --mode local (no Docker) or --dry-run."
+            )
+        return
 
 
 def _retag(policy: Policy, version: str) -> Policy:

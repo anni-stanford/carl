@@ -146,6 +146,66 @@ class ClaudeCodeAdapter(PolicyAdapter):
                     ) from exc
                 (claude_dir / "settings.json").write_text(art.content, encoding="utf-8")
 
+    async def run_episode_local(
+        self,
+        repo_path: Path,
+        task: Task,
+        policy: Policy,
+        timeout_s: int,
+        *,
+        claude_bin: str,
+    ) -> Trajectory:
+        """Run a single Claude-Code episode locally (no Docker).
+
+        Copies the repo to a temp dir, writes ``policy`` into it, runs the
+        Claude Code CLI in headless ``-p`` mode, then runs CI locally and
+        returns a :class:`Trajectory` whose metadata points at the artifact
+        files the verifier reads. The user's working tree is never mutated.
+        """
+        from carl.env.local_sandbox import run_local_episode
+
+        start = time.monotonic()
+
+        async def _writer(work_dir: Path) -> None:
+            await self.write_policy(work_dir, policy)
+
+        result = await run_local_episode(
+            Path(repo_path),
+            _writer,
+            task.prompt,
+            claude_bin=claude_bin,
+            timeout_s=timeout_s,
+        )
+        events = [
+            TraceEvent(
+                timestamp=time.monotonic() - start,
+                kind="exit",
+                payload={
+                    "exit_code": result.exit_code,
+                    "agent_ran": result.agent_ran,
+                    "duration_s": result.duration_s,
+                },
+            )
+        ]
+        return Trajectory(
+            task=task,
+            policy=policy,
+            events=events,
+            files_changed=[],
+            exit_code=result.exit_code,
+            duration_s=result.duration_s,
+            raw_ci_output=result.stdout + "\n" + result.stderr,
+            raw_test_output=result.stdout,
+            metadata={
+                "artifact_dir": str(result.artifact_dir),
+                "pytest_report_json": str(result.artifact_dir / "pytest.json"),
+                "coverage_xml": str(result.artifact_dir / "coverage.xml"),
+                "ruff_json": str(result.artifact_dir / "ruff.json"),
+                "mypy_output": str(result.artifact_dir / "mypy.txt"),
+                "mode": "local",
+            },
+        )
+
     async def run_episode(
         self,
         repo_path: Path,

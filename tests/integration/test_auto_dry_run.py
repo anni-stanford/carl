@@ -91,8 +91,8 @@ def test_auto_dry_run_is_deterministic_in_headline(tmp_path: Path) -> None:
     )
 
 
-def test_auto_real_run_fails_loudly_without_env(tmp_path: Path, monkeypatch) -> None:
-    """Without --dry-run, ANTHROPIC_API_KEY missing => clear error, not a corrupt run."""
+def test_auto_docker_mode_fails_loudly_without_env(tmp_path: Path, monkeypatch) -> None:
+    """--mode docker without ANTHROPIC_API_KEY => clear error, not a corrupt run."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     runner = CliRunner()
     repo = tmp_path / "repo"
@@ -102,6 +102,7 @@ def test_auto_real_run_fails_loudly_without_env(tmp_path: Path, monkeypatch) -> 
         [
             "auto",
             "--repo", str(repo),
+            "--mode", "docker",
             "--probe-n", "10",
             "--episodes", "4",
             "--report", str(tmp_path / "r.md"),
@@ -110,3 +111,36 @@ def test_auto_real_run_fails_loudly_without_env(tmp_path: Path, monkeypatch) -> 
     )
     assert result.exit_code != 0
     assert "ANTHROPIC_API_KEY" in result.output
+
+
+def test_auto_mode_falls_back_to_dry_run_gracefully(tmp_path: Path, monkeypatch) -> None:
+    """Default --mode auto with no Claude CLI, no Docker, no key => clean dry-run.
+
+    This is the key behavior change that makes `carl auto` a true single
+    command: it never hard-crashes for missing prerequisites; it falls back
+    to a clearly-labeled synthetic dry-run and still writes a report.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CARL_CLAUDE_BIN", raising=False)
+    # Force claude detection + docker detection to fail.
+    monkeypatch.setattr("carl.env.local_sandbox.claude_cli_available", lambda: None)
+    monkeypatch.setattr("carl.auto._docker_available", lambda: False)
+
+    runner = CliRunner()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    report = tmp_path / "r.md"
+    result = runner.invoke(
+        main,
+        [
+            "auto",
+            "--repo", str(repo),
+            "--probe-n", "6",
+            "--episodes", "4",
+            "--report", str(report),
+            "--buffer", str(tmp_path / "b.sqlite"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "dry-run" in result.output.lower()
+    assert report.is_file()

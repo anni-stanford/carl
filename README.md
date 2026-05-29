@@ -12,26 +12,41 @@ CARL ≠ fine-tuning model weights. CARL is RL with **text-space policy paramete
 
 **Anni Zimina** — Stanford CS153 Spring 2026 final project (research track).
 
-## Quickstart — one pasteable command
+## Quickstart — one command, no Docker
 
-From inside any git repo with a Python test suite, paste this one line:
+If you already use Claude Code, you already have everything CARL needs. From
+inside the git repo you want to improve:
+
+```bash
+pip install git+https://github.com/anni-stanford/carl.git
+python -m carl auto
+```
+
+`carl auto` runs the whole before/after pipeline against the current repo and
+writes `CARL_REPORT.md`. In the default `auto` mode it uses a **no-Docker local
+runner** when the Claude Code CLI (`claude`) is on your PATH — real episodes,
+your existing Claude Code authentication, nothing else to install. If no Claude
+Code CLI is found it falls back to a synthetic `--dry-run` so you still get a
+report to inspect.
+
+One-liner version (reads the same install + run, with an environment check):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/anni-stanford/carl/main/scripts/quickstart.sh | bash
 ```
 
-That single line installs `carl-loop` from GitHub, detects whether you have `ANTHROPIC_API_KEY` set and Docker running, builds the episode image (one-time, ~3 min) if needed, and runs `carl auto` end-to-end against the current directory. If either prerequisite is missing it falls back to `carl auto --dry-run` so you still see a real `CARL_REPORT.md` (synthetic rewards, real statistical pipeline) without any external dependency.
-
-If you prefer the explicit steps:
+Modes:
 
 ```bash
-pip install git+https://github.com/anni-stanford/carl.git    # one-time
-python -m carl auto --dry-run                                # no Docker, no API key
-# or, for a real run:
-docker build -t carl/episode-claude:latest -f docker/Dockerfile.episode.claude .
-export ANTHROPIC_API_KEY=...
-python -m carl auto
+python -m carl auto              # auto: local runner if `claude` is on PATH
+python -m carl auto --local      # force the no-Docker local runner
+python -m carl auto --dry-run    # synthetic rewards, zero dependencies
+python -m carl auto --mode docker  # isolated Docker sandbox (needs the image)
 ```
+
+Docker is **optional** — only `--mode docker` uses it, for stronger sandbox
+isolation. The local runner copies your repo to a temp directory so your
+working tree is never mutated.
 
 ## RL formulation
 

@@ -41,6 +41,20 @@ def main() -> None:
     default=Path("carl_run/buffer.sqlite"),
 )
 @click.option(
+    "--mode",
+    type=click.Choice(["auto", "local", "docker", "dry-run"]),
+    default="auto",
+    show_default=True,
+    help="Execution mode. 'auto' prefers the no-Docker local runner when the "
+    "Claude Code CLI is present, else Docker, else a synthetic dry-run.",
+)
+@click.option(
+    "--local",
+    "force_local",
+    is_flag=True,
+    help="shorthand for --mode local (run real episodes with no Docker).",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="use deterministic synthetic rewards (no Docker, no API key, no network).",
@@ -52,21 +66,27 @@ def auto(
     episodes: int,
     report: Path,
     buffer: Path,
+    mode: str,
+    force_local: bool,
     dry_run: bool,
     seed: int,
 ) -> None:
     """End-to-end: pre-flight + BEFORE benchmark + training + AFTER benchmark + paired-bootstrap gate + CARL_REPORT.md.
 
-    Real run requires a git repo, a running Docker daemon, and ANTHROPIC_API_KEY.
-    Use ``--dry-run`` to validate the pipeline against synthetic rewards.
+    By default (``--mode auto``) CARL uses the no-Docker local runner when the
+    Claude Code CLI is installed, so a single ``carl auto`` is all a Claude
+    Code user needs. ``--dry-run`` validates the pipeline against synthetic
+    rewards with no external dependency.
     """
     from carl.auto import AutoOptions, run_auto
 
+    resolved_mode = "local" if force_local else mode
     opts = AutoOptions(
         repo_path=Path(repo).resolve(),
         n_probe=probe_n,
         n_train_episodes=episodes,
         dry_run=dry_run,
+        mode=resolved_mode,
         buffer_path=buffer,
         report_path=report,
         rng_seed=seed,
