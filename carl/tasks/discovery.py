@@ -41,13 +41,22 @@ def discover_tasks(repo_path: Path, n: int = 10) -> list[TaskSpec]:
     """
     cfg = repo_path / ".carl" / "tasks.yaml"
     if cfg.is_file():
-        return _load_yaml_tasks(cfg)[:n]
+        out = _load_yaml_tasks(cfg)
+    else:
+        out = _scan_repo(repo_path)
 
-    discovered = _scan_repo(repo_path)
-    if discovered:
-        return discovered[:n]
-
-    return default_synthetic_tasks(n)
+    # Pad up to n with default tasks so a small repo still yields enough
+    # paired probe tasks for the bootstrap gate (which needs >= 2). Without
+    # this, a tiny repo could produce a single task and degenerate the stats.
+    if len(out) < n:
+        seen_ids = {t.task_id for t in out}
+        for extra in default_synthetic_tasks(n):
+            if len(out) >= n:
+                break
+            if extra.task_id not in seen_ids:
+                out.append(extra)
+                seen_ids.add(extra.task_id)
+    return out[:n]
 
 
 def default_synthetic_tasks(n: int = 10) -> list[TaskSpec]:

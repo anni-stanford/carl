@@ -59,10 +59,17 @@ def evaluate_gate(
             f"{len(candidate_rewards)} vs {len(baseline_rewards)}"
         )
     n = len(candidate_rewards)
-    if n < config.min_probe_tasks:
+    # The bootstrap requires at least 2 paired observations; below that we
+    # return a graceful REJECT rather than letting scipy raise. We also honor
+    # the configured research-grade floor (min_probe_tasks).
+    floor = max(2, config.min_probe_tasks)
+    if n < floor:
         return GateResult(
             promote=False,
-            mean_lift=0.0,
+            mean_lift=float(
+                np.mean(np.asarray(candidate_rewards, dtype=float)
+                        - np.asarray(baseline_rewards, dtype=float))
+            ) if n > 0 else 0.0,
             ci_low=0.0,
             ci_high=0.0,
             p_value=1.0,
@@ -70,8 +77,9 @@ def evaluate_gate(
             n_resamples=config.n_resamples,
             confidence=config.confidence,
             reason=(
-                f"insufficient probe tasks: n={n} < min_probe_tasks="
-                f"{config.min_probe_tasks}"
+                f"insufficient probe tasks: n={n} < required minimum "
+                f"{floor} (bootstrap needs >= 2; configured floor "
+                f"{config.min_probe_tasks})"
             ),
         )
 

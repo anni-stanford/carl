@@ -75,3 +75,25 @@ def test_seeded_reproducibility(cfg: PromotionGateConfig) -> None:
     a = evaluate_gate(cand, base, cfg, rng_seed=20260517)
     b = evaluate_gate(cand, base, cfg, rng_seed=20260517)
     assert a == b
+
+
+def test_single_task_does_not_crash(cfg: PromotionGateConfig) -> None:
+    """n=1 must return a graceful REJECT, never raise (bootstrap needs >= 2)."""
+    relaxed = PromotionGateConfig(
+        n_resamples=2000, confidence=0.95, min_probe_tasks=1,
+        require_ci_lower_bound_above=0.0,
+    )
+    out = evaluate_gate([0.7], [0.5], relaxed, rng_seed=1)
+    assert out.promote is False
+    assert out.n_tasks == 1
+    assert "insufficient probe tasks" in out.reason
+
+
+def test_two_tasks_runs_bootstrap(cfg: PromotionGateConfig) -> None:
+    """n=2 is the minimum the bootstrap can handle; must not raise."""
+    relaxed = PromotionGateConfig(
+        n_resamples=2000, confidence=0.95, min_probe_tasks=2,
+        require_ci_lower_bound_above=0.0,
+    )
+    out = evaluate_gate([0.7, 0.8], [0.5, 0.6], relaxed, rng_seed=1)
+    assert out.n_tasks == 2

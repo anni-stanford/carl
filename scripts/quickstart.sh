@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 #
-# CARL quickstart — pasteable one-liner, no Docker required.
+# CARL quickstart — one pasteable command, no Docker, no pip headaches.
 # Run from inside the git repo you want CARL to improve:
 #
 #   curl -sSL https://raw.githubusercontent.com/anni-stanford/carl/main/scripts/quickstart.sh | bash
 #
-# What it does:
-#   1. Checks Python 3.11+.
-#   2. Installs carl-loop from GitHub (PyPI publish pending).
-#   3. Runs `python -m carl auto` against the current directory.
-#      - In "auto" mode CARL uses the no-Docker local runner when the
-#        Claude Code CLI (`claude`) is on PATH, so it runs real episodes
-#        with your existing Claude Code authentication.
-#      - If no Claude Code CLI is found, it falls back to a synthetic
-#        --dry-run so you still get a CARL_REPORT.md to inspect.
+# Why this exists: `pip install` on a Homebrew / system Python now fails with
+# "externally-managed-environment" (PEP 668), and `--user` installs land off
+# PATH. To spare every user that friction, this script creates ONE isolated
+# virtual environment at ~/.carl/venv, installs CARL into it, and runs CARL
+# from it. Your system/Homebrew Python is never touched and nothing is
+# installed on your PATH.
 #
-# Read this script before piping it to bash. It only runs pip + carl.
+# It only runs python -m venv, pip (inside the venv), and `carl`. Read it
+# before piping to bash.
 
 set -euo pipefail
 
@@ -23,31 +21,52 @@ green()  { printf '\033[32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 
-PYTHON="${PYTHON:-python3}"
-if ! command -v "$PYTHON" >/dev/null 2>&1; then
-    red "error: python3 not found. Install Python 3.11+ and retry."
+CARL_HOME="${CARL_HOME:-$HOME/.carl}"
+VENV="$CARL_HOME/venv"
+INSTALL_SPEC="${CARL_INSTALL_SPEC:-git+https://github.com/anni-stanford/carl.git}"
+
+# 1) Find a Python >= 3.11 without assuming which name it has.
+pick_python() {
+    for cand in python3.13 python3.12 python3.11 python3 python; do
+        if command -v "$cand" >/dev/null 2>&1; then
+            if "$cand" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)' 2>/dev/null; then
+                echo "$cand"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+PYBIN="$(pick_python || true)"
+if [[ -z "$PYBIN" ]]; then
+    red "error: no Python 3.11+ found."
+    red "Install one and re-run:  brew install python@3.12   (macOS)"
     exit 2
 fi
-PY_OK=$("$PYTHON" -c 'import sys; print("1" if sys.version_info >= (3, 11) else "0")')
-if [[ "$PY_OK" != "1" ]]; then
-    red "error: CARL needs Python >= 3.11; you have $("$PYTHON" -V 2>&1)."
-    red "Install a newer Python (brew install python@3.12) and re-run with PYTHON=python3.12."
-    exit 2
+green "[carl] using $("$PYBIN" -V 2>&1) at $(command -v "$PYBIN")"
+
+# 2) Create the isolated venv once (reused on later runs).
+if [[ ! -x "$VENV/bin/python" ]]; then
+    green "[carl] creating isolated environment at $VENV"
+    "$PYBIN" -m venv "$VENV"
+else
+    green "[carl] reusing environment at $VENV"
 fi
-green "[carl] python ok"
 
-green "[carl] installing carl-loop"
-"$PYTHON" -m pip install --user --upgrade --quiet pip
-"$PYTHON" -m pip install --user --quiet "git+https://github.com/anni-stanford/carl.git"
+# 3) Install / upgrade CARL inside the venv (no PEP 668 issue, no PATH issue).
+green "[carl] installing carl-loop (this can take a minute)"
+"$VENV/bin/python" -m pip install --quiet --upgrade pip
+"$VENV/bin/python" -m pip install --quiet --upgrade "$INSTALL_SPEC"
 
+# 4) Tell the user what mode they'll get.
 if command -v claude >/dev/null 2>&1 || [[ -n "${CARL_CLAUDE_BIN:-}" ]]; then
-    green "[carl] Claude Code CLI detected — running real local episodes (no Docker)"
+    green "[carl] Claude Code CLI detected — real local episodes (no Docker)"
 else
     yellow "[carl] No Claude Code CLI found — CARL will run a synthetic --dry-run."
     yellow "[carl] Install Claude Code and re-run for a real before/after."
 fi
 
-green "[carl] running: python -m carl auto"
-"$PYTHON" -m carl auto
-
-green "[carl] done — open CARL_REPORT.md for the before/after report."
+# 5) Run CARL against the current directory. Pass through any extra args.
+green "[carl] running: carl auto  (in $(pwd))"
+exec "$VENV/bin/python" -m carl auto "$@"
